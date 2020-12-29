@@ -1,42 +1,66 @@
 '''
 creates confound files based on fmriprep output
-usage: python3 confounds.py <path/to/fmriprep/directory> <path/to/derivatives>
+usage: python3 confounds.py <path/to/project/directory>
+
 Caleb Haynes Winter 2020 - built off Jeff Denison's MakeConfounds.py script
+
+Objective:
+
+Read in confound regressor tsvs in fmriprep output. 
+
+Filter for specified columns. 
+
+Write out to derivatives/fsl/confounds directory.
+
+
+code/
+
+data/
+    /bids/
+    /derivatives/        
+        /fmriprep/sub*/*/*.confounds.tsv <--in
+        /fsl/confounds/sub*/counfounds.tsv {filtered} <--out
+
 '''
-import os
+
+
 import glob
 import sys
-import numpy as np
 import pandas as pd
+import os
+
+confound_list = ['cosine',
+                'non_steady_state',
+                'aroma',
+                'csf',
+                'wm'
+]
 
 
-cons = glob.glob(sys.argv[1] + '**/*confounds*.tsv', recursive=True)
+def simple_filter(f): #reads in file, outputs filtered df
+    df = pd.read_csv(f,sep='\t')    
+    return df.loc[:, df.columns.isin(confound_list)]
 
 
-for f in cons:
+proj_dir = sys.argv[1]
+file_list = glob.glob(proj_dir + '/**/derivatives/fmriprep/sub*/func/*confounds*.tsv', recursive=True)
+out_file = 'data/derivatives/fsl/confounds/'
+
+for cnf_file in file_list:
+
+    cnf_file_path =  cnf_file.split('/')
     
-    file_data =  f.split('/')
-    
-    subno = file_data[-3]
-    file_name = file_data[-1]
-    path = sys.argv[2] + 'fsl/confounds/' + file_name
+    #subject folder in fmriprep dataset     fmriprep/[subno]/func/confound.tsv
+    subno = cnf_file_path[-3]
 
-    df = pd.read_csv(f,sep='\t')
-
-    csf_wm =['csf','white_matter']
-    cosine = [col for col in df if col.startswith('cosine')]
-    nss = [col for col in df if col.startswith('non_steady_state')]
-    aroma_motion=[col for col in df if col.startswith('aroma')]
+    #file name in fmriprep dataset          fmriprep/subno/func/[confounds.tsv]
+    file_name = cnf_file_path[-1]
+    df = simple_filter(cnf_file)
+    out_path = out_file + subno + '/' + file_name
     
-    filter_col=np.concatenate([csf_wm, cosine, nss, aroma_motion])
-
+    print("Writing "+ out_path)
     
-    df_all = df[filter_col]
-
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
     
-    if not os.path.exists(path):
-        os.makedirs(path)
-    
-    df_all.to_csv(index=False,sep='\t',header=False)
-
-    
+    df.to_csv(out_path, index=False,sep='\t',header=False)
